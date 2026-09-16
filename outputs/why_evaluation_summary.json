@@ -1,0 +1,11 @@
+{
+  "total_customers": 12,
+  "factual_accuracy_raw": 1.0,
+  "factual_accuracy_final": 1.0,
+  "hallucination_rate": 0.0,
+  "value_mismatch_rate": 0.0,
+  "retry_rate": 0.0,
+  "rejection_rate": 0.0,
+  "mean_data_retrieval_latency_sec": 0.011683033333333795,
+  "mean_end_to_end_latency_sec": 9.475221916666666
+}

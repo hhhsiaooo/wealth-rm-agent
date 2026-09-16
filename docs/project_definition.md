@@ -21,7 +21,6 @@ Dashboard 已降低理專資訊查找及理解成本：
 13 位認為有助於快速理解陌生客戶
 11 位認為有助於業務媒合與銷售轉換。
 ```
-
 ### 五、Problem Discovery
 * **Problem A：Dashboard 資訊太多且 Insight 仍需要人工整合**
   * Dashboard 已有效改善「資訊分散」的問題。

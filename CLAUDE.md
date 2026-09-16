@@ -72,30 +72,41 @@ Do not introduce ML ranking in the current implementation.
 Purpose:
 Explain why a customer is worth contacting.
 
-The WHY layer must NOT rely on the LLM to discover customer facts directly.
-
 Flow:
-
 Structured Customer Data
     ↓
-Evidence Extraction
+get_customer_profile(customer_id)
     ↓
-Key Evidence
+Complete 43-field Customer Record
     ↓
 LLM
     ↓
-Customer Insight
+Relevant Fields + Customer Insight
+    ↓
+Fact Validation
 
-Key Evidence represents factual, traceable customer information.
-
-Customer Insight is the natural-language interpretation generated from verified evidence.
+The LLM may identify which fields are relevant to the question:
+「為什麼這位客戶值得優先聯繫？」
 
 Requirements:
-- Customer facts must come from structured data.
-- Every key evidence item must be traceable to source fields.
+- Customer facts must come from the structured customer record.
+- The LLM may select relevant fields from the complete customer record.
+- Every selected field and value must be traceable to the source record.
 - LLM must not invent customer facts.
-- LLM must not fabricate numbers, products, behaviors, or customer attributes.
-- LLM should organize and explain evidence rather than independently inventing business facts.
+- LLM must not modify source values.
+- LLM must not assume values that are not present.
+- LLM must not create new business rules.
+- LLM must not recalculate Priority Score.
+- Fact validation must be performed after LLM generation.
+
+Implementation Rules:
+- Retrieve customer data through `get_customer_profile(customer_id)`.
+- For a single-customer query, do not send the entire CSV to the LLM.
+- The LLM may select relevant fields from the complete 43-field customer record.
+- LLM output must use a structured schema.
+- Validate LLM-selected fields and values against the source customer record.
+- Do not introduce deterministic evidence extraction unless explicitly requested.
+- Do not modify WHO ranking logic while implementing WHY.
 
 ### WHAT — Next Best Action
 
@@ -158,12 +169,13 @@ The project must be implemented incrementally.
 ### Phase 2 — WHY
 
 1. WHY specification validation
-2. Evidence schema
-3. Evidence extraction
-4. Evidence validation
+2. Customer data tool
+3. Customer record schema
+4. LLM relevant-field selection
 5. Customer Insight generation
-6. LLM grounding validation
-7. WHY evaluation
+6. Fact validation
+7. LLM grounding validation
+8. WHY evaluation
 
 ### Phase 3 — WHAT
 

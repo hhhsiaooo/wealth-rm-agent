@@ -119,7 +119,7 @@ RM Final Decision
 | fund_view_count_1m_score | 25% |
 
 ### Priority Score
-資產潛力高 + 有閒置資金與配置缺口 + 有投資意圖
+資產潛力高 + 有閒置資金或配置缺口 + 有投資意圖
 
 | Score | Weight |
 | :---: | :---: |
@@ -127,65 +127,159 @@ RM Final Decision
 | Investment Intent Score| 35% |
 | Asset Potential Score| 20% |
 
-## 五、Task 1 — WHO: Priority Customer
-
-
-## 三、Product Knowledge
-* 來源：Documents → RAG
-* 資料：
-Product Description
-Fund Prospectus
-FAQ
-Risk Information
-Product Features
-Sales Guidelines
-
-## 四、Task
+## 五、Task
 ### 1. Priority Customer
 #### Business Question
-在目前約 2,000 位財管客戶中，如何找出最值得優先聯繫的 Top 10 客戶。
+如何在 1,000 位財管客戶中，找出最值得優先聯繫的 Top 10 客戶。
+```
+All 1,000 Customer Data > Scoring > Priority Score > Top 10 Customer Data
+```
 #### Input
-根據資產規模、投資配置缺口、近期投資意圖等訊號計算 Priority Score。
+欄位定義與內容請參考「三、Data Definition 」。
+* Raw Data(24 個欄位)：`data/synthetic/customers_raw.csv`。
+* 加上 Derived Features (5 個欄位)：`data/synthetic/customers_features.csv`。
+* 加上 Feature Scores (9 個欄位)：`data/synthetic/customers_scored.csv`。
 #### Output
-Top 10 Priority Customers
-Rank	Customer	Score	Key Evidence
-1	C001	92	AUM 高、現金占比高、近期瀏覽基金
-2	C017	87	資金近期增加、目前基金持有低
-3	C032	84	高資產、近期有投資行為
+根據資產潛力、有閒置資金或配置缺口、有投資意圖等訊號計算 Priority Score。
+* 加上 SubScores (3 個欄位)、Priority Score (1 個欄位)、Rank (1 個欄位)：`outputs/priority_customers_all.csv`。共 1,000 筆客戶資料，43 個欄位 。
+* 篩選排序前 10 的客戶資料：`outputs/priority_customers_top10.csv`。
 #### Constraint
-僅使用取得且經授權的客戶資料；每個 Priority Score 必須可解釋。
+僅使用取得且經授權的客戶資料，每個 Priority Score 必須可解釋。
 #### Evaluation
-Contact Rate、Qualified Contact Rate、Conversion Rate
-Precision@10、Recall@10（視 Golden Dataset 定義）
+Contact Rate、Conversion Rate、Precision@10、Recall@10。
 #### Experiment
-Rule-based Ranking vs AI/ML Ranking（MVP 可先以 Rule-based 作為 Baseline）
-Score=AUM Score+ Cash Allocation Score+ Investment Gap Score+ Recent Intent Score+ Behavior Score
-AI Ranking 在 Precision@10 等離線指標優於 Baseline，且不增加過多決策時間
+Rule-based Ranking（Baseline） vs AI/ML Ranking
 
 ### 2. Customer Evidence
 #### Business Question
-將客戶分散的多維度資料轉換成 RM 可以快速理解的客戶洞察與聯繫理由
+將客戶多維度資料轉換成 RM 可以快速理解的客戶洞察與聯繫理由。
+```
+LLM > Tool calling：get_customer_profile(customer_id) > Customer Record > LLM > Customer Insight + Relevant Fields > Fact Validation
+```
 #### Input
-根據 Priority Ranking 所使用的訊號，擷取相關 Customer Facts，再由 LLM 組織成 Evidence
+透過 Function/Tool 取得指定客戶資料。
+程式碼：`tools/customer_tool.py`。
+* Function：`get_customer_profile(customer_id)`
+* Resource：`outputs/priority_customers_top10.csv`
+* Input：`customer_id: string`
+* Output：JSON object containing the customer's 43 fields.
+* 系統不會將完整的 `priority_customers_top10.csv`
+傳給 LLM，而是先根據 `customer_id` 取得單一客戶的 43-field Customer Record，再提供給 LLM。
+* Example:
+```
+{
+"customer_id": "C0001",
+"occupation": "finance",
+"job_level": "Manager",
+...
+"total_aum": 8000000,
+"twd_demand_ratio": 0.72,
+"investment_ratio": 0.08,
+...
+"asset_potential_score": 85,
+"investment_gap_score": 92,
+"investment_intent_score": 88,
+"priority_score": 90,
+"priority_rank": 1
+}
+```
 #### Output
-Customer：C001
-Priority：High
-Key Evidence：
-* AUM 約 800 萬
-* 台幣存款占資產約 72%
-* 目前無基金持有
-* 近三個月有 8 次基金瀏覽
-* 近期有未完成申購紀錄
-Business Interpretation：客戶目前資產規模較高，但投資型產品配置較低，近期又出現基金相關行為，因此具有進一步了解投資需求的訊號。
-Data Sources：Asset / Product / Digital Behavior
+取得單一客戶的 43-field Customer Record ，根據客戶排序所使用的訊號，由 LLM 組織成 Customer Insight + Relevant Fields。
+程式碼：`insight/insight_generator.py`。
+
+LLM receives the complete structured customer record
+returned by `get_customer_profile(customer_id)`.
+LLM should:
+1. Identify customer fields relevant to the question:「為什麼這位客戶值得優先聯繫？」
+2. Identify the major signals contributing to the customer's Priority Score.
+3. Combine relevant customer facts into a concise Customer Insight.
+4. Explain why these facts make the customer worth RM attention.
+5. Return the selected fields used to support the insight.
+
+LLM must NOT:
+1. Invent customer facts.
+2. Modify customer values.
+3. Assume values that are not present.
+4. Create new business rules.
+5. Recalculate Priority Score.
+6. Recommend a financial product at the WHY stage.
+7. Make a final suitability judgment.
+
+Example:
+```
+{
+  "customer_id": "C0001",
+  "priority_rank": 1,
+  "priority_score": 90,
+  "key_fields": [
+    {
+      "field": "total_aum",
+      "value": 8000000
+    },
+    {
+      "field": "twd_demand_ratio",
+      "value": 0.72
+    },
+    {
+      "field": "investment_ratio",
+      "value": 0.08
+    },
+    {
+      "field": "has_fund",
+      "value": 0
+    },
+    {
+      "field": "fund_view_count_1m",
+      "value": 18
+    }
+  ],
+  "insight": "客戶目前資產約800萬元，台幣活存占AUM約72%，理財庫存占比僅8%，目前沒有基金持有；近1個月有18次基金瀏覽，因此可優先了解其投資需求。"
+}
+```
+
+Pydantic model:
+```
+class KeyField(BaseModel):
+    field: str
+    value: Any
+
+class CustomerInsight(BaseModel):
+    customer_id: str
+    priority_rank: int
+    priority_score: float
+    key_fields: list[KeyField]
+    insight: str
+```
 #### Constraint
-LLM 不得產生不存在於 Customer Data 的事實；Evidence 必須可追溯至資料來源
+LLM 不得產生不存在於 Customer Data 的事實，必須可追溯至資料來源。
+
+#### Fact Validation
+驗證 LLM 產出的 Customer Insight + Relevant Fields 是否與 Customer Data Resource 相符。
+程式碼：`insight/fact_validator.py`。
+
+After LLM generation, the system validates every key field returned by the LLM against the original 43-field customer record retrieved from the WHO Ranking Output.
+
+The source dataset is:
+`outputs/priority_customers_top10.csv`
+
+This file contains the Top 10 priority customers
+(or more than 10 customers when tied ranks occur),
+with 43 fields per customer.
+When a Customer ID is provided, the system retrieves only the corresponding customer record instead of sending the entire CSV to the LLM.
+
+Validation should check:
+* `customer_id` exists and matches the requested customer
+* selected field exists in the source record
+* selected value matches the source value
+* `priority_score` matches the source value
+* `priority_rank` matches the source value
+If validation fails, the response should not be treated as fully grounded.
+
 #### Evaluation
-Customer Understanding Time、Decision Time
-Factual Accuracy、Evidence Coverage、Faithfulness、Hallucination Rate
+Decision Time、Factual Accuracy、Hallucination Rate
 #### Experiment
-Raw Customer 360 vs AI-generated Customer Evidence
-降低 RM 理解客戶所需時間，同時維持高事實正確率與低 Hallucination
+Raw Customer 360 Dashboard vs AI-generated Customer Evidence
+降低 RM 理解客戶所需時間，同時維持高事實正確率與低 Hallucination。
 
 ### 3. Next Best Action
 #### Business Question
@@ -210,30 +304,34 @@ Recommendation Accuracy、Action Agreement、Groundedness、Hallucination Rate
 RM 根據經驗自行決定聯繫策略 vs Customer Evidence + NBA
 提升 RM 決策效率與行動一致性，且推薦內容具有資料與產品知識依據
 
-### 三、Tool
-AI Agent 不應該直接碰 Database。
-不要全部丟進 Vector DB。
-Structured Data → Tool / SQL
-Knowledge → RAG
-Reasoning / Explanation → LLM
-* `get_customer_profile(customer_id)`
-查客戶基本資料
-* `get_customer_assets(customer_id)`
-查資產
-* `get_customer_behavior(customer_id)`
-查行為
-* `search_priority_customers(criteria)`
-找候選客戶
-* `search_products(criteria)`
-搜尋產品
-* `get_product_detail(product_id)`
-取得產品資訊
+## 六、Function / Tool Definition
+* 取得指定客戶資料 `get_customer_profile(customer_id)`
+  * Purpose：取得指定客戶的完整 Structured Customer Data。
+  * Input：customer_id: string
+  * Output：JSON object containing the customer's 43 fields from WHO Ranking Output.
+  * Example:
+```
+{
+"customer_id": "C0001",
+"occupation": "finance",
+"job_level": "Manager",
+...
+"total_aum": 8000000,
+"twd_demand_ratio": 0.72,
+"investment_ratio": 0.08,
+...
+"asset_potential_score": 85,
+"investment_gap_score": 92,
+"investment_intent_score": 88,
+"priority_score": 90,
+"priority_rank": 1
+}
+```
 
-### 四、RAG
+## 七、RAG
 當 AI 要回答「這個產品是什麼、適合什麼樣的客戶、有哪些注意事項」時，知識從哪裡來？
-#### Purpose
 RAG is used to retrieve up-to-date product knowledge and provide grounded context for AI-generated explanations and candidate action recommendations.
-#### Knowledge Base
+### Knowledge Base
 Structure
 ```
 Product Knowledge
@@ -255,7 +353,7 @@ effective_date
 source
 version
 ```
-#### RAG Flow
+### RAG Flow
 ```
 Customer Evidence
         ↓
@@ -273,13 +371,13 @@ LLM
         ↓
 Grounded Response
 ```
-#### Output
+### Output
 不要只有：「推薦基金 A。」
 而是：
 「根據產品資料，基金 A 的風險屬性為中高風險，主要投資於 XXX，適合投資期間 XXX。由於客戶目前風險屬性為中高風險，因此可作為後續需求討論的候選產品，但仍需進一步確認適合度。」
 這樣才能測：Retrieval Quality、Groundedness、Hallucination、Recommendation Accuracy
 
-### 五、Agent Workflow
+## 八、Agent Workflow
 ```
                     RM
                      │
@@ -309,7 +407,7 @@ Grounded Response
                      ▼
               Final Response
 ```
-#### Agent Responsibilities
+## Agent Responsibilities
 Component	Responsibility
 Database / SQL	提供客戶事實
 Ranking Model / Rule	找 Priority Customer
