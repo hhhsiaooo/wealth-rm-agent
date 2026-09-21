@@ -114,7 +114,6 @@ Purpose:
 Recommend the next action an RM can take based on customer evidence and product knowledge.
 
 Flow:
-
 Customer Evidence
     +
 Customer Conditions
@@ -131,24 +130,25 @@ LLM
     ↓
 Next Best Action
 
-The system must use a predefined Action Space.
-
-Current candidate actions:
-
+The system must use a predefined Action Space:
 - A1: 投資需求訪談
 - A2: 基金產品介紹
-- A3: 定存到期資金規劃
+- A3: 定存資產配置討論
 - A4: 外幣資產配置討論
 - A5: 既有投資組合檢視
 - A6: 暫不聯繫
 
-The AI provides decision support only.
-
-It must NOT:
-- execute transactions
-- automatically contact customers
-- make final suitability decisions
-- autonomously determine actions outside the predefined Action Space
+Important:
+- Do not create new business rules without explicit human approval.
+- Do not allow LLM to determine eligibility rules.
+- Eligibility / Business Rules must be deterministic and testable.
+- Product Knowledge and Customer Data must remain separate.
+- RAG is responsible for retrieving Product Knowledge.
+- RAG must not retrieve or infer customer personal information.
+- LLM must only generate explanations from validated customer information,
+  business rules, and retrieved product context.
+- Product recommendations must be traceable to Product Knowledge.
+- Do not implement Agent orchestration, UI, or Phase 4 feature
 
 ## Development Workflow
 
@@ -179,14 +179,18 @@ The project must be implemented incrementally.
 
 ### Phase 3 — WHAT
 
-1. Action Space definition
-2. Business rule validation
-3. Product Knowledge schema
-4. Product Knowledge dataset
-5. Retrieval
-6. Reranking / filtering
-7. Next Best Action generation
-8. WHAT evaluation
+1. WHAT specification validation
+2. Action Space definition
+3. Eligibility / Business Rules definition
+4. Business rule validation
+5. Product Knowledge schema
+6. Synthetic Product Knowledge dataset
+7. Product document preparation / chunking
+8. Retrieval
+9. Reranking / filtering
+10. Next Best Action generation
+11. Recommendation output validation
+12. WHAT evaluation
 
 ### Phase 4 — Agent / Tool Use
 
@@ -241,8 +245,13 @@ wealth-rm-agent/
 │   │    └── customer_priority.py
 │   ├── rag/
 │   ├── agent/
+│   ├── insight/
+│   │    ├── fact_validator.py
+│   │    └── insight_generator.py
 │   ├── tools/
+│   │    └── customer_tool.py
 │   └── evaluation/
+│   │    └── why_evaluation.py
 ├── outputs/
 │   ├── priority_customers_all.csv
 │   └── priority_customers_top10.csv
@@ -250,7 +259,11 @@ wealth-rm-agent/
     ├── conftest.py
     ├── test_customer_priority.py
     ├── test_customer_scoring.py
-    └── test_feature_engineering.py
+    ├── test_customer_tool.py
+    ├── test_fact_validator.py
+    ├── test_feature_engineering.py
+    ├── test_insight_generator.py
+    └── test_why_evaluation.py
 
 ## Data Specification
 

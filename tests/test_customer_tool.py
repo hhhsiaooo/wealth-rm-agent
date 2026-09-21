@@ -7,6 +7,7 @@ import pandas as pd
 import pytest
 
 from tools.customer_tool import (
+    ALL_PATH,
     EXPECTED_FIELDS,
     TOP10_PATH,
     CustomerDataError,
@@ -159,3 +160,20 @@ def test_every_customer_in_actual_top10_file_is_retrievable():
     for customer_id in df["customer_id"]:
         profile = get_customer_profile(customer_id)
         assert profile["customer_id"] == customer_id
+
+
+@pytest.mark.skipif(not ALL_PATH.exists(), reason="priority_customers_all.csv not generated yet")
+def test_all_path_can_look_up_a_customer_not_in_top10():
+    """The chat use case: WHY/WHAT should be queryable for any of the 1,000
+    customers via ALL_PATH, not just today's Top10."""
+    top10_ids = set(pd.read_csv(TOP10_PATH)["customer_id"]) if TOP10_PATH.exists() else set()
+    all_df = pd.read_csv(ALL_PATH)
+    assert len(all_df) == 1000
+
+    non_top10_ids = all_df.loc[~all_df["customer_id"].isin(top10_ids), "customer_id"]
+    assert len(non_top10_ids) > 0  # sanity: there really are customers outside Top10
+    sample_id = non_top10_ids.iloc[0]
+
+    profile = get_customer_profile(sample_id, source_path=ALL_PATH)
+    assert profile["customer_id"] == sample_id
+    assert len(profile) == 43

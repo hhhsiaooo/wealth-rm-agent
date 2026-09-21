@@ -1,8 +1,17 @@
 """Phase 2 (WHY), Step 2: Customer data tool.
 
 get_customer_profile(customer_id) retrieves ONE customer's complete 43-field
-record from outputs/priority_customers_top10.csv (the WHO Top-N output) and
-returns it as a JSON-compatible dict.
+record and returns it as a JSON-compatible dict. Two WHO outputs share the
+identical 43-field schema and can both be used as source_path:
+
+- TOP10_PATH (default): outputs/priority_customers_top10.csv -- today's
+  pre-computed priority list (12 customers with the current data).
+- ALL_PATH: outputs/priority_customers_all.csv -- all 1,000 customers, for
+  on-demand lookups (e.g. a chat interface) where the RM can ask about any
+  customer, not just today's Top-N. WHO's ranking itself stays a batch
+  computation (ranking is inherently comparative across the whole
+  population); this only affects which customers WHY/WHAT can be queried
+  about after the fact.
 
 This module performs a pure structured-data lookup only:
 - no business inference
@@ -26,6 +35,8 @@ import pandas as pd
 
 TOP10_PATH = Path(__file__).resolve(
 ).parents[2] / "outputs" / "priority_customers_top10.csv"
+ALL_PATH = Path(__file__).resolve(
+).parents[2] / "outputs" / "priority_customers_all.csv"
 
 # The WHO pipeline's full 43-field output schema (Step5:
 # outputs/priority_customers_top10.csv). Kept as an explicit literal here
