@@ -11,8 +11,10 @@ from insight.insight_generator import (
     InsightGenerationError,
     KeyField,
     build_prompt,
+    call_with_retry,
     generate_customer_insight,
     load_env_file,
+    resolve_model,
 )
 from tools.customer_tool import EXPECTED_FIELDS, TOP10_PATH, CustomerNotFoundError
 
@@ -246,3 +248,70 @@ def test_real_gemini_api_call_returns_valid_insight():
     assert result.customer_id == customer_id
     assert len(result.key_fields) >= 1
     assert len(result.insight) > 0
+
+
+# -- call_with_retry (transient provider errors) --------------------------------
+
+class FakeApiError(Exception):
+    def __init__(self, code):
+        super().__init__(f"api error {code}")
+        self.code = code
+
+
+def make_flaky(fail_codes, result="ok"):
+    calls = {"n": 0}
+
+    def fn():
+        calls["n"] += 1
+        if calls["n"] <= len(fail_codes):
+            raise FakeApiError(fail_codes[calls["n"] - 1])
+        return result
+
+    return fn, calls
+
+
+def test_call_with_retry_recovers_from_transient_errors():
+    fn, calls = make_flaky([503, 429])
+    sleeps = []
+    assert call_with_retry(fn, delays=(1.0, 2.0, 3.0), sleep=sleeps.append) == "ok"
+    assert calls["n"] == 3 and sleeps == [1.0, 2.0]
+
+
+def test_call_with_retry_gives_up_after_the_last_delay():
+    fn, calls = make_flaky([503, 503, 503, 503, 503])
+    sleeps = []
+    with pytest.raises(FakeApiError):
+        call_with_retry(fn, delays=(1.0, 2.0), sleep=sleeps.append)
+    assert calls["n"] == 3 and sleeps == [1.0, 2.0]
+
+
+def test_call_with_retry_does_not_retry_non_transient_errors():
+    fn, calls = make_flaky([400])
+    with pytest.raises(FakeApiError):
+        call_with_retry(fn, delays=(1.0,), sleep=lambda s: None)
+    assert calls["n"] == 1
+
+
+def test_call_with_retry_does_not_wait_on_a_per_day_quota():
+    class DailyQuota(FakeApiError):
+        def __str__(self):
+            return "429 RESOURCE_EXHAUSTED GenerateRequestsPerDayPerProjectPerModel-FreeTier"
+
+    calls = {"n": 0}
+
+    def fn():
+        calls["n"] += 1
+        raise DailyQuota(429)
+
+    sleeps = []
+    with pytest.raises(FakeApiError):
+        call_with_retry(fn, delays=(1.0, 2.0), sleep=sleeps.append)
+    assert calls["n"] == 1 and sleeps == []
+
+
+def test_resolve_model_precedence(monkeypatch):
+    monkeypatch.delenv("SOME_MODEL", raising=False)
+    assert resolve_model(None, "SOME_MODEL", "default-model") == "default-model"
+    monkeypatch.setenv("SOME_MODEL", "env-model")
+    assert resolve_model(None, "SOME_MODEL", "default-model") == "env-model"
+    assert resolve_model("explicit-model", "SOME_MODEL", "default-model") == "explicit-model"

@@ -1,5 +1,9 @@
 """Phase 3.1 (WHAT): Eligibility / Business Rules.
 
+這個檔案負責「六個候選行動（A1～A6）哪些成立」，全部是 if/else 數值比較，
+完全不呼叫 LLM，也不需要 AI 判斷——這是整條 WHAT 流程裡最「死板」的一層，
+故意設計成這樣，因為要選哪個行動必須可重現、可解釋、可稽核。
+
 Each check_aN() is a pure function: customer dict in, (eligible, matched_conditions)
 out. No LLM, no rule engine -- transcribed 1:1 from docs/ai_product_design.md
 "五、Task／3. Next Best Action／Eligibility / Business Rules". Do not invent
@@ -31,7 +35,26 @@ ACTION_NAMES = {
     "A6": "暫不聯繫",
 }
 
+# Only these actions trigger Product Knowledge retrieval (RAG); value is the
+# Knowledge Base product_category to search. A1/A5/A6 get an LLM explanation
+# without retrieval (docs/ai_product_design.md, Task 3 / Output).
+RETRIEVAL_CATEGORY_BY_ACTION = {"A2": "Fund", "A3": "TD", "A4": "FX"}
+
 A2_ELIGIBLE_RISK_LEVELS = {"Medium", "High"}
+
+# Product-risk suitability filter: not in the original spec, added at the
+# product owner's request after the Phase 3 readiness review and confirmed
+# (docs/ai_product_design.md, "Eligibility / Business Rules"). A product is
+# retrievable for a customer only if its risk_level does not exceed the
+# customer's risk_level (Low < Medium < High). Applied as a metadata
+# pre-filter in retrieval.
+RISK_ORDER = {"Low": 0, "Medium": 1, "High": 2}
+
+
+def allowed_product_risk_levels(customer_risk_level: str) -> list[str]:
+    """Product risk levels a customer may be shown, lowest first."""
+    limit = RISK_ORDER[customer_risk_level]
+    return [level for level, rank in sorted(RISK_ORDER.items(), key=lambda kv: kv[1]) if rank <= limit]
 
 
 def check_a1(customer: dict[str, Any]) -> tuple[bool, list[str]]:

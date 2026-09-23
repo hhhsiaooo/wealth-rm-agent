@@ -176,7 +176,7 @@ def main() -> None:
     llm_client = select_llm_client()
 
     # Gemini's free tier is rate-limited to a handful of requests per minute
-    # (observed: 5 RPM for gemini-3.6-flash); throttle to stay under it. No
+    # (observed: 5 RPM on a free-tier Gemini model); throttle to stay under it. No
     # such limit is needed for the paid Anthropic tier.
     delay = 13.0 if isinstance(llm_client, GeminiLLMClient) else 0.0
 

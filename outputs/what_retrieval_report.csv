@@ -1,0 +1,16 @@
+﻿category,customer_risk_level,currency_hint,query,hit_count,category_correct_count,risk_allowed_count,top1_currency_match
+Fund,Low,,低風險、適合投資需求的基金產品,2,2,2,
+Fund,Medium,,中風險、適合投資需求的基金產品,3,3,3,
+Fund,High,,高風險、適合投資需求的基金產品,3,3,3,
+TD,Low,,低風險、適合資金停泊與定存配置的定存產品,3,3,3,
+TD,Low,台幣,低風險、適合資金停泊與定存配置、台幣的定存產品,3,3,3,True
+TD,Low,外幣,低風險、適合資金停泊與定存配置、外幣的定存產品,3,3,3,True
+TD,Medium,,中風險、適合資金停泊與定存配置的定存產品,3,3,3,
+TD,Medium,台幣,中風險、適合資金停泊與定存配置、台幣的定存產品,3,3,3,True
+TD,Medium,外幣,中風險、適合資金停泊與定存配置、外幣的定存產品,3,3,3,True
+TD,High,,高風險、適合資金停泊與定存配置的定存產品,3,3,3,
+TD,High,台幣,高風險、適合資金停泊與定存配置、台幣的定存產品,3,3,3,True
+TD,High,外幣,高風險、適合資金停泊與定存配置、外幣的定存產品,3,3,3,True
+FX,Low,,低風險、適合外幣資產配置的外幣產品,3,3,3,
+FX,Medium,,中風險、適合外幣資產配置的外幣產品,3,3,3,
+FX,High,,高風險、適合外幣資產配置的外幣產品,3,3,3,

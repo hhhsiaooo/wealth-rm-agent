@@ -1,5 +1,8 @@
 """Phase 3.2 (WHAT): Action Selection.
 
+同樣不呼叫 LLM：business_rules.py 算出「哪些行動成立」，這個檔案只是照
+固定優先順序（A2>A3>A4>A5>A1>A6）從成立的行動裡選一個當作最終建議。
+
 Every customer in this project's synthetic Top10 population satisfies more
 than one Eligibility rule at once (confirmed empirically during the Phase 3
 readiness review), so a deterministic tie-break is not an edge case here --

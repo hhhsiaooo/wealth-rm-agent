@@ -1,0 +1,97 @@
+{
+  "pipeline": {
+    "total_customers": 21,
+    "customers_by_action": {
+      "A1": 3,
+      "A2": 7,
+      "A3": 5,
+      "A5": 3,
+      "A6": 3
+    },
+    "groundedness_raw": {
+      "numerator": 21,
+      "denominator": 21,
+      "rate": 1.0
+    },
+    "groundedness_final": {
+      "numerator": 21,
+      "denominator": 21,
+      "rate": 1.0
+    },
+    "business_rule_compliance": {
+      "numerator": 21,
+      "denominator": 21,
+      "rate": 1.0
+    },
+    "product_retrieval_correctness": {
+      "numerator": 36,
+      "denominator": 36,
+      "rate": 1.0
+    },
+    "product_selection_in_retrieved": {
+      "numerator": 36,
+      "denominator": 36,
+      "rate": 1.0
+    },
+    "product_name_accuracy": {
+      "numerator": 36,
+      "denominator": 36,
+      "rate": 1.0
+    },
+    "product_risk_accuracy": {
+      "numerator": 36,
+      "denominator": 36,
+      "rate": 1.0
+    },
+    "numeric_claim_support": {
+      "numerator": 53,
+      "denominator": 57,
+      "rate": 0.9298245614035088
+    },
+    "risk_statement_accuracy": {
+      "numerator": 12,
+      "denominator": 13,
+      "rate": 0.9230769230769231
+    },
+    "action_consistency": {
+      "numerator": 0,
+      "denominator": 0,
+      "rate": null
+    },
+    "product_jaccard_mean": null,
+    "product_jaccard_n": 0,
+    "retry_rate": {
+      "numerator": 0,
+      "denominator": 21,
+      "rate": 0.0
+    },
+    "rejection_rate": {
+      "numerator": 0,
+      "denominator": 21,
+      "rate": 0.0
+    },
+    "mean_data_retrieval_latency_sec": 0.008798995238098937,
+    "mean_product_retrieval_latency_sec": 0.4721400333333352,
+    "mean_llm_generation_latency_sec": 1.5917472476190464,
+    "mean_end_to_end_latency_sec": 1.869071166666671
+  },
+  "retrieval": {
+    "total_cases": 15,
+    "empty_result_cases": 0,
+    "category_correctness": {
+      "numerator": 44,
+      "denominator": 44,
+      "rate": 1.0
+    },
+    "risk_filter_correctness": {
+      "numerator": 44,
+      "denominator": 44,
+      "rate": 1.0
+    },
+    "currency_hint_top1_match": {
+      "numerator": 6,
+      "denominator": 6,
+      "rate": 1.0
+    }
+  }
+}

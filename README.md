@@ -10,7 +10,7 @@
 | WHO | 優先聯繫客戶排序 | Rule-based Scoring | 已完成 |
 | WHY | 客戶洞察與事實查核 | Function Calling + LLM 結構化輸出 + Fact Validation | 已完成 |
 | WHAT | 下一步行動建議 | Product RAG + LLM | 已完成 |
-| Agent Flow | 多流程協調 | Tool Use / Agent Workflow | 規劃中 |
+| Agent Flow | 多流程協調 | Function Calling / Agent Workflow | 已完成 |
 
 **重要聲明：** 本專案使用**合成資料**做概念驗證，不含真實客戶資料；不宣稱任何真實業務成效。
 
@@ -156,11 +156,24 @@ wealth-rm-agent/
 │   ├── insight/              # WHY：insight_generator、fact_validator
 │   ├── tools/                # Function Calling：customer_tool
 │   ├── rag/                  # WHAT：產品知識檢索
-│   ├── agent/                # Agent 編排（規劃中）
+│   ├── agent/                # Agent：rm_agent、agent_llm、agent_tools、render
+│   ├── ui/                   # UI：app（Streamlit）、view_models
 │   └── evaluation/           # 評估
 ├── outputs/                  # 客戶排序結果（all / top10）
 └── tests/                    # pytest
 ```
+
+## 執行方式
+
+```
+poetry install
+cp .env.example .env          # 填入 GEMINI_API_KEY；模型名稱在 GEMINI_MODEL
+poetry run streamlit run src/ui/app.py       # 網頁介面
+poetry run python src/agent/rm_agent.py      # 命令列對話
+poetry run pytest                            # 測試
+```
+
+免費額度：Gemini 免費層每個模型有每日請求上限，遇到 429 時把 `.env` 的 `GEMINI_MODEL` 換成別的模型即可。
 
 ## 開發方式
 
@@ -178,8 +191,8 @@ wealth-rm-agent/
 | 1 | WHO：資料生成、特徵、評分、排序 | 已完成 |
 | 2 | WHY：客戶資料 Tool、洞察生成、事實查核、評估 | 已完成 |
 | 3 | WHAT：行動規則、產品知識庫、RAG、推薦驗證 | 已完成 |
-| 4 | Agent / Tool Use：Tool schema、Agent workflow、Guardrails | 規劃中 |
-| 5 | UI 介面 | 規劃中 |
+| 4 | Agent / Tool Use：Tool schema、Agent workflow、Guardrails | 已完成 |
+| 5 | UI 介面 | 已完成 |
 | 6 | 實驗與優化：延遲分析、檢索與 Prompt / 模型實驗、RM 回饋 | 規劃中 |
 
 ## 限制與聲明

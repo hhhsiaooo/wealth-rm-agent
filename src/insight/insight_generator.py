@@ -18,10 +18,13 @@ from __future__ import annotations
 
 import os
 import sys
+import time
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Callable, Optional, Protocol, Sequence, TypeVar
 
 from pydantic import BaseModel, Field
+
+T = TypeVar("T", bound=BaseModel)
 
 _SRC_DIR = Path(__file__).resolve().parents[1]
 if str(_SRC_DIR) not in sys.path:
@@ -29,8 +32,10 @@ if str(_SRC_DIR) not in sys.path:
 
 from tools.customer_tool import CustomerDataError, TOP10_PATH, get_customer_profile  # noqa: E402
 
+# Model names are configured in .env (GEMINI_MODEL / ANTHROPIC_MODEL). These two
+# constants are only the fallback used when .env does not set them.
 DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-5"
-DEFAULT_GEMINI_MODEL = "gemini-3.6-flash"
+DEFAULT_GEMINI_MODEL = "gemini-3.5-flash"
 ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
 
 
@@ -60,6 +65,14 @@ class LLMClient(Protocol):
     """
 
     def __call__(self, prompt: str) -> CustomerInsight: ...
+
+
+class StructuredLLMClient(Protocol):
+    """LLM client that can return any Pydantic model as structured output.
+    Used by WHAT (rag/nba_generator.py); the real Gemini/Anthropic clients
+    implement it via generate()."""
+
+    def generate(self, prompt: str, response_model: type[T]) -> T: ...
 
 
 def load_env_file(path: Path = ENV_FILE) -> None:
@@ -163,25 +176,64 @@ class AnthropicLLMClient:
     parsing/validation is done in this module.
     """
 
-    def __init__(self, model: str = DEFAULT_ANTHROPIC_MODEL, api_key: str | None = None) -> None:
+    def __init__(self, model: str | None = None, api_key: str | None = None) -> None:
         import anthropic
 
         self._client = anthropic.Anthropic(api_key=api_key)
-        self._model = model
+        self._model = resolve_model(model, "ANTHROPIC_MODEL", DEFAULT_ANTHROPIC_MODEL)
 
     def __call__(self, prompt: str) -> CustomerInsight:
+        return self.generate(prompt, CustomerInsight)
+
+    def generate(self, prompt: str, response_model: type[T]) -> T:
+        """Structured output for any Pydantic model (used by WHAT's NBA
+        generation as well as WHY's CustomerInsight)."""
         response = self._client.messages.parse(
             model=self._model,
             max_tokens=2048,
             messages=[{"role": "user", "content": prompt}],
-            output_format=CustomerInsight,
+            output_format=response_model,
         )
         if response.parsed_output is None:
             raise InsightGenerationError(
-                f"Anthropic API did not return a parsed CustomerInsight "
+                f"Anthropic API did not return a parsed {response_model.__name__} "
                 f"(stop_reason={response.stop_reason!r})"
             )
         return response.parsed_output
+
+
+# Transient provider errors worth retrying: rate limit (429) and server-side
+# overload/unavailable (500/503/504). Anything else (400 bad request, 401/403
+# auth, ...) is a real error and is raised immediately.
+def resolve_model(explicit: str | None, env_var: str, default: str) -> str:
+    """Model precedence: explicit argument > environment variable (.env) > default."""
+    return explicit or os.environ.get(env_var) or default
+
+
+RETRYABLE_STATUS_CODES = {429, 500, 503, 504}
+RETRY_DELAYS_SEC = (5.0, 15.0, 45.0)
+
+
+def call_with_retry(
+    fn: Callable[[], T],
+    delays: Optional[Sequence[float]] = None,
+    sleep: Optional[Callable[[float], None]] = None,
+) -> T:
+    """Call fn(); on a transient API error wait and retry, up to len(delays)
+    retries, then raise the last error. Defaults are looked up at call time
+    (not bound at definition) so tests can shorten the waits."""
+    delays = RETRY_DELAYS_SEC if delays is None else delays
+    sleep = time.sleep if sleep is None else sleep
+    for delay in (*delays, None):
+        try:
+            return fn()
+        except Exception as exc:  # provider SDKs raise their own error types
+            status = getattr(exc, "code", None) or getattr(exc, "status_code", None)
+            # A per-day quota does not reset within seconds; waiting is pointless.
+            if delay is None or status not in RETRYABLE_STATUS_CODES or "PerDay" in str(exc):
+                raise
+            sleep(delay)
+    raise AssertionError("unreachable")  # pragma: no cover
 
 
 class GeminiLLMClient:
@@ -192,27 +244,44 @@ class GeminiLLMClient:
     as a parsed Pydantic instance via response.parsed.
     """
 
-    def __init__(self, model: str = DEFAULT_GEMINI_MODEL, api_key: str | None = None) -> None:
+    def __init__(self, model: str | None = None, api_key: str | None = None) -> None:
         from google import genai
 
         resolved_key = api_key or os.environ.get("GEMINI_API_KEY")
         self._client = genai.Client(api_key=resolved_key)
-        self._model = model
+        self._model = resolve_model(model, "GEMINI_MODEL", DEFAULT_GEMINI_MODEL)
+
+    @property
+    def client(self):
+        """The underlying google-genai client (shared with the Agent's native tool-calling adapter)."""
+        return self._client
+
+    @property
+    def model(self) -> str:
+        return self._model
 
     def __call__(self, prompt: str) -> CustomerInsight:
+        return self.generate(prompt, CustomerInsight)
+
+    def generate(self, prompt: str, response_model: type[T]) -> T:
+        """Structured output for any Pydantic model. Note: keep response
+        models free of field defaults -- Gemini's response_schema has been
+        reported to reject Pydantic defaults (python-genai issue #699)."""
         from google.genai import types
 
-        response = self._client.models.generate_content(
-            model=self._model,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema=CustomerInsight,
-            ),
+        response = call_with_retry(
+            lambda: self._client.models.generate_content(
+                model=self._model,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=response_model,
+                ),
+            )
         )
         if response.parsed is None:
             raise InsightGenerationError(
-                "Gemini API did not return a parsed CustomerInsight "
+                f"Gemini API did not return a parsed {response_model.__name__} "
                 f"(text={response.text!r})"
             )
         return response.parsed

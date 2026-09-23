@@ -16,13 +16,13 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
-from typing import Protocol
+from typing import Callable, Optional, Protocol, Sequence
 
 _SRC_DIR = Path(__file__).resolve().parents[1]
 if str(_SRC_DIR) not in sys.path:
     sys.path.insert(0, str(_SRC_DIR))
 
-from insight.insight_generator import load_env_file  # noqa: E402
+from insight.insight_generator import load_env_file, resolve_model  # noqa: E402
 from rag.product_knowledge import PRODUCTS, ProductKnowledge  # noqa: E402
 
 DEFAULT_EMBEDDING_MODEL = "gemini-embedding-001"
@@ -36,14 +36,24 @@ class EmbeddingClient(Protocol):
 
 
 class GeminiEmbeddingClient:
-    """Real embedding client backed by the Gemini Embedding API."""
+    """Real embedding client backed by the Gemini Embedding API.
 
-    def __init__(self, model: str = DEFAULT_EMBEDDING_MODEL, api_key: str | None = None) -> None:
+    Model precedence: explicit `model` argument > `.env`'s EMBEDDING_MODEL >
+    DEFAULT_EMBEDDING_MODEL -- same pattern as GeminiLLMClient / GEMINI_MODEL
+    (insight/insight_generator.py), so embedding model swaps for latency /
+    quality experiments (Phase 5) don't need a code change either.
+    """
+
+    def __init__(self, model: str | None = None, api_key: str | None = None) -> None:
         from google import genai
 
         resolved_key = api_key or os.environ.get("GEMINI_API_KEY")
         self._client = genai.Client(api_key=resolved_key)
-        self._model = model
+        self._model = resolve_model(model, "EMBEDDING_MODEL", DEFAULT_EMBEDDING_MODEL)
+
+    @property
+    def model(self) -> str:
+        return self._model
 
     def __call__(self, text: str) -> list[float]:
         result = self._client.models.embed_content(
@@ -80,18 +90,30 @@ def build_collection(
     return collection
 
 
+# 這裡不呼叫會「寫文字」的 LLM，是用 Embedding 模型把 query 轉成向量，
+# 跟資料庫裡每個產品的向量算相似度，回傳最接近的幾筆——本質是比對／
+# 排序，不是生成內容。
 def search(
     collection,
     embedding_client: EmbeddingClient,
     query: str,
     product_category: str | None = None,
     n_results: int = 3,
+    risk_levels: Sequence[str] | None = None,
 ) -> list[dict]:
-    """Embed the query, retrieve top-K, optionally filtered to one
-    product_category (3.9 Filtering). Returns a list of
-    {product_id, document, metadata, distance} dicts, best match first."""
+    """Embed the query, retrieve top-K, with optional metadata pre-filters
+    (3.9 Filtering): product_category (exact) and risk_levels (product
+    risk_level must be one of them). Filters are applied inside the vector
+    store, so the top-K are all eligible -- not filtered after the fact.
+    Returns a list of {product_id, document, metadata, distance} dicts,
+    best match first."""
     query_embedding = embedding_client(query)
-    where = {"product_category": product_category} if product_category else None
+    conditions = []
+    if product_category:
+        conditions.append({"product_category": product_category})
+    if risk_levels:
+        conditions.append({"risk_level": {"$in": list(risk_levels)}})
+    where = None if not conditions else conditions[0] if len(conditions) == 1 else {"$and": conditions}
 
     result = collection.query(
         query_embeddings=[query_embedding],
@@ -108,6 +130,39 @@ def search(
             "distance": result["distances"][0][i],
         })
     return hits
+
+
+# (query, product_category, allowed product risk levels or None) -> hits
+ProductRetriever = Callable[[str, str, Optional[Sequence[str]]], list[dict]]
+
+
+def make_retriever(collection, embedding_client: EmbeddingClient, n_results: int = 3) -> ProductRetriever:
+    """Bind a Chroma collection + embedding client into a plain function, so
+    callers (nba_generator, agent tools) depend on a tiny interface and tests
+    can inject a fake."""
+
+    def retriever(query: str, product_category: str, risk_levels: Optional[Sequence[str]] = None) -> list[dict]:
+        return search(
+            collection, embedding_client, query,
+            product_category=product_category, n_results=n_results, risk_levels=risk_levels,
+        )
+
+    return retriever
+
+
+def load_or_build_collection(
+    embedding_client: EmbeddingClient,
+    persist_path: Path = CHROMA_PATH,
+    collection_name: str = COLLECTION_NAME,
+    products: list[ProductKnowledge] | None = None,
+):
+    """Reuse an already-indexed collection; only call the (paid/rate-limited)
+    embedding API to build it when it is missing or incomplete."""
+    products = products if products is not None else PRODUCTS
+    existing = get_chroma_client(persist_path).get_or_create_collection(name=collection_name)
+    if existing.count() >= len(products):
+        return existing
+    return build_collection(embedding_client, persist_path, collection_name, products)
 
 
 DEMO_QUERIES: list[tuple[str, str | None]] = [

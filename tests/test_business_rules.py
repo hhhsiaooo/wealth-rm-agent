@@ -4,6 +4,7 @@ import pytest
 
 from rag.business_rules import (
     ACTION_NAMES,
+    allowed_product_risk_levels,
     check_a1,
     check_a2,
     check_a3,
@@ -164,3 +165,14 @@ def test_evaluate_actions_multiple_eligible_at_once():
 
 def test_action_names_cover_all_six_ids():
     assert set(ACTION_NAMES.keys()) == {"A1", "A2", "A3", "A4", "A5", "A6"}
+
+
+# -- product-risk suitability filter (new rule, pending product-owner confirmation) --
+
+@pytest.mark.parametrize("customer_risk,expected", [
+    ("Low", ["Low"]),
+    ("Medium", ["Low", "Medium"]),
+    ("High", ["Low", "Medium", "High"]),
+])
+def test_allowed_product_risk_levels_never_exceed_customer_risk(customer_risk, expected):
+    assert allowed_product_risk_levels(customer_risk) == expected

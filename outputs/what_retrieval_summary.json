@@ -1,0 +1,19 @@
+{
+  "total_cases": 15,
+  "empty_result_cases": 0,
+  "category_correctness": {
+    "numerator": 44,
+    "denominator": 44,
+    "rate": 1.0
+  },
+  "risk_filter_correctness": {
+    "numerator": 44,
+    "denominator": 44,
+    "rate": 1.0
+  },
+  "currency_hint_top1_match": {
+    "numerator": 6,
+    "denominator": 6,
+    "rate": 1.0
+  }
+}

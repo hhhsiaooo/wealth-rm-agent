@@ -19,8 +19,8 @@ This module performs a pure structured-data lookup only:
 - no Priority Score recalculation
 - no changes to WHO ranking logic
 
-It is the single entry point Phase 2's insight_generator.py (not implemented
-in this step) will call before sending a customer record to the LLM.
+It is the single entry point insight/insight_generator.py (WHY) and
+rag/nba_generator.py (WHAT) call before sending a customer record to the LLM.
 """
 
 from __future__ import annotations

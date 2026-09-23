@@ -16,15 +16,15 @@ The overall product goal is to help Wealth Management RMs answer:
 - WHY is this customer worth contacting?
 - WHAT action should I take next?
 
-The current project focuses on the WHO stage:
-Priority Customer Ranking.
-The system should identify customers who may have:
+WHO, WHY, WHAT, the Agent, and a demo UI are all implemented (Phases 1-5
+below); Phase 6 (Experiment / Optimization) is the only phase not started
+beyond an initial latency log. WHO identifies customers who may have:
 - high asset potential
 - investment gap
 - recent investment intent
 
-The current implementation uses Rule-based Ranking as the baseline.
-Do not introduce ML ranking in the current implementation.
+WHO's implementation uses Rule-based Ranking as the baseline.
+Do not introduce ML ranking.
 
 More project information:
 - docs/project_definition.md
@@ -148,7 +148,7 @@ Important:
 - LLM must only generate explanations from validated customer information,
   business rules, and retrieved product context.
 - Product recommendations must be traceable to Product Knowledge.
-- Do not implement Agent orchestration, UI, or Phase 4 feature
+- The UI (src/ui/) only displays validated tool results; it must not call an LLM or re-implement business rules itself
 
 ## Development Workflow
 
@@ -194,16 +194,33 @@ The project must be implemented incrementally.
 
 ### Phase 4 — Agent / Tool Use
 
-1. Tool schema
-2. Customer data tools
-3. Product search tools
-4. Agent workflow
-5. Guardrails
-6. End-to-end validation
+1. Tool schema (three tools: Top-10 list / customer insight / next best action)
+2. Tools (thin wrappers over the already-validated WHO / WHY / WHAT pipelines)
+3. Agent workflow (autonomous tool-calling loop)
+4. Guardrails
+5. End-to-end validation
 
-### Phase 5 — Experiment / Optimization
+Phase 4 rules:
+- The Agent orchestrates existing pipelines; it must not re-implement or bypass business rules, fact validation or recommendation validation.
+- The LLM only decides which tool to call, asks for clarification, or says a request is unsupported. The final reply shown to the RM is rendered by code from tool results, never free-written by the LLM.
+- get_next_best_action runs WHY first when no insight is cached for that customer in the session; if WHY is rejected, WHAT still runs without insight and says so.
+- Any customer_id must exist in outputs/priority_customers_all.csv before a tool runs.
+- LLM provider is swappable (Gemini default, Anthropic optional) behind an interface; tests use a stub LLM, never a real API.
 
-1. Latency analysis
+### Phase 5 — UI
+
+1. Chat interface over the Agent (Streamlit)
+2. Sidebar priority list (WHO), no LLM call to render it
+3. Structured display of tool results: status badges for the grounding
+   outcome, expandable evidence fields, expandable tool-call trace
+4. The UI only displays validated tool results; it must not call an LLM or
+   re-implement business rules itself
+
+### Phase 6 — Experiment / Optimization
+
+1. Latency analysis -- started: agent/latency.py logs per-stage latency
+   (data retrieval, WHY/WHAT LLM generation, RAG retrieval, end-to-end) for
+   every real Agent question to outputs/agent_latency_log.jsonl
 2. Retrieval experiments
 3. Prompt / model experiments
 4. Human evaluation
@@ -244,14 +261,30 @@ wealth-rm-agent/
 │   │    ├── customer_scoring.py
 │   │    └── customer_priority.py
 │   ├── rag/
+│   │    ├── schemas.py
+│   │    ├── business_rules.py
+│   │    ├── action_selector.py
+│   │    ├── product_knowledge.py
+│   │    ├── retrieval.py
+│   │    ├── nba_generator.py
+│   │    └── recommendation_validator.py
 │   ├── agent/
+│   │    ├── agent_llm.py
+│   │    ├── agent_tools.py
+│   │    ├── render.py
+│   │    ├── rm_agent.py
+│   │    └── latency.py
+│   ├── ui/
+│   │    ├── app.py
+│   │    └── view_models.py
 │   ├── insight/
 │   │    ├── fact_validator.py
 │   │    └── insight_generator.py
 │   ├── tools/
 │   │    └── customer_tool.py
 │   └── evaluation/
-│   │    └── why_evaluation.py
+│   │    ├── why_evaluation.py
+│   │    └── what_evaluation.py
 ├── outputs/
 │   ├── priority_customers_all.csv
 │   └── priority_customers_top10.csv
@@ -263,7 +296,19 @@ wealth-rm-agent/
     ├── test_fact_validator.py
     ├── test_feature_engineering.py
     ├── test_insight_generator.py
-    └── test_why_evaluation.py
+    ├── test_why_evaluation.py
+    ├── test_business_rules.py
+    ├── test_action_selector.py
+    ├── test_product_knowledge.py
+    ├── test_retrieval.py
+    ├── test_nba_generator.py
+    ├── test_recommendation_validator.py
+    ├── test_what_evaluation.py
+    ├── test_agent.py
+    ├── test_agent_native.py
+    ├── test_ui_view_models.py
+    ├── test_ui_app.py
+    └── test_latency.py
 
 ## Data Specification
 
