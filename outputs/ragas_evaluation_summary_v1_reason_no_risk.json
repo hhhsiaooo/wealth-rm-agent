@@ -1,0 +1,11 @@
+{
+  "total_customers": 15,
+  "total_scored_texts": 63,
+  "judge_failures": 0,
+  "mean_faithfulness_overall": 0.6487852975948214,
+  "mean_faithfulness_why_insight": 0.8948412698412699,
+  "mean_faithfulness_what_explanation": 0.6729285529285529,
+  "mean_faithfulness_what_reason": 0.5259674668765577,
+  "generation_model": "gemini-3.5-flash-lite",
+  "judge_model": "gemini-3.5-flash-lite"
+}

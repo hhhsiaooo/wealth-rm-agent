@@ -218,13 +218,23 @@ Phase 4 rules:
 
 ### Phase 6 — Experiment / Optimization
 
-1. Latency analysis -- started: agent/latency.py logs per-stage latency
+1. Evaluation infrastructure -- in progress: RAGAS Faithfulness, LLM-as-judge
+   rubric, Context Precision/Recall (docs/evaluation_design.md)
+2. Latency analysis -- started: agent/latency.py logs per-stage latency
    (data retrieval, WHY/WHAT LLM generation, RAG retrieval, end-to-end) for
    every real Agent question to outputs/agent_latency_log.jsonl
-2. Retrieval experiments
-3. Prompt / model experiments
-4. Human evaluation
-5. RM feedback
+3. Retrieval experiments
+4. Prompt / model experiments
+5. Human evaluation
+6. RM feedback
+
+Phase 6 rules:
+- RAGAS metric calls (Faithfulness, any LLM-based Context Precision/Recall)
+  must be stubbed in pytest, same as the existing stub-LLM rule -- never
+  call a real provider from a test.
+- RAGAS LLM-judge calls must reuse the existing Gemini free-tier throttling
+  pattern (`delay = 13.0 if isinstance(llm_client, GeminiLLMClient) else 0.0`)
+  used in why_evaluation.py/what_evaluation.py.
 
 Do not skip phases.
 
@@ -253,7 +263,8 @@ wealth-rm-agent/
 │   └── synthetic/
 │   │    ├── customers_raw.csv
 │   │    ├── customers_features.csv
-│   │    └── customers_scored.csv
+│   │    ├── customers_scored.csv
+│   │    └── retrieval_golden_dataset.json
 ├── src/
 │   ├── ranking/
 │   │    ├── generate_data.py
@@ -284,10 +295,22 @@ wealth-rm-agent/
 │   │    └── customer_tool.py
 │   └── evaluation/
 │   │    ├── why_evaluation.py
-│   │    └── what_evaluation.py
+│   │    ├── what_evaluation.py
+│   │    ├── ragas_faithfulness.py
+│   │    └── ragas_evaluation.py
 ├── outputs/
 │   ├── priority_customers_all.csv
-│   └── priority_customers_top10.csv
+│   ├── priority_customers_top10.csv
+│   ├── why_evaluation_report.csv
+│   ├── why_evaluation_summary.json
+│   ├── what_evaluation_report.csv
+│   ├── what_evaluation_summary.json
+│   ├── what_retrieval_report.csv
+│   ├── what_retrieval_summary.json
+│   ├── ragas_evaluation_report.csv
+│   ├── ragas_evaluation_summary.json
+│   ├── ragas_rejudge_report.csv
+│   └── ragas_rejudge_summary.json
 └── tests/
     ├── conftest.py
     ├── test_customer_priority.py
@@ -308,7 +331,8 @@ wealth-rm-agent/
     ├── test_agent_native.py
     ├── test_ui_view_models.py
     ├── test_ui_app.py
-    └── test_latency.py
+    ├── test_latency.py
+    └── test_ragas_evaluation.py
 
 ## Data Specification
 
@@ -437,6 +461,7 @@ Evaluate:
 - Evidence Coverage
 - Evidence Traceability
 - Hallucination Rate
+- Faithfulness (free-text insight vs. source customer record)
 
 Compare:
 Customer Dashboard / Customer 360
@@ -453,6 +478,7 @@ Evaluate:
 - Recommendation Consistency
 - Business Rule Compliance
 - Groundedness
+- Faithfulness (free-text explanation/reason vs. matched conditions + retrieved product context)
 
 ### System Performance
 
@@ -500,6 +526,21 @@ Rules:
 - Before adding a new dependency, check whether the existing dependencies can satisfy the requirement.
 - Do not add dependencies without explaining why they are needed.
 - Do not manually edit dependency versions in `pyproject.toml` unless necessary.
+- `ragas`, `langchain-core`, and `langchain-google-genai` are dev
+  dependencies (used only by `src/evaluation/`, never by production
+  `src/agent`/`src/rag`/`src/insight` code) -- add via
+  `poetry add --group dev "ragas>=0.3.9,<0.4.0" langchain-core langchain-google-genai`.
+  Every currently-available ragas release unconditionally imports
+  `langchain_community.chat_models.vertexai.ChatVertexAI` from
+  `ragas/llms/base.py`, a path removed from langchain-community in its
+  0.4.2 release -- `import ragas` crashes regardless of ragas version or
+  provider unless that module is present. Rather than pin an old
+  langchain-community (risking a conflict with the langchain-core version
+  already in use), `src/evaluation/ragas_faithfulness.py` stubs the dead
+  import path in `sys.modules` before `ragas` is imported. Delete that stub
+  once ragas ships the real upstream fix.
+  Gemini is the only LLM judge wired up for now (no Anthropic API plan);
+  add `langchain-anthropic` later if an Anthropic judge is needed.
 
 ## Important Rules
 
@@ -513,7 +554,11 @@ Rules:
 - Use a fixed random seed for reproducibility.
 - Preserve deterministic outputs.
 - Add validation and pytest tests for important boundaries and business rules.
-  
+- Do not modify or replace existing rule-based validation
+  (`insight/fact_validator.py`, `rag/recommendation_validator.py`) or
+  existing evaluation summary fields when adding RAGAS/LLM-judge metrics.
+  New metrics are independent additions only (see docs/evaluation_design.md).
+
 ## Collaboration Rules
 
 Before coding:

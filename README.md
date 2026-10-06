@@ -206,6 +206,7 @@ poetry run pytest                            # 測試
 
 - [商業背景與問題發現](docs/project_definition.md)
 - [AI 產品設計](docs/ai_product_design.md)
+- [評估設計（Evaluation Design）](docs/evaluation_design.md)
 
 ## 授權
 
